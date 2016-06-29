@@ -8,9 +8,9 @@ import os
 from urllib2 import urlopen
 import platform
 
-target = '165.90.3.58'
-#processor = 'logserver.dl1.newtouch.com'
+target = '8.8.8.8'
 processor = '10.0.63.200'
+processor_port = 8001
 
 def find_ip():
     my_ip = urlopen('http://ip.42.pl/raw').read()
@@ -36,7 +36,7 @@ def write_base(fi):
     fi.write('LocalAddress: %s\n' % find_ip())
     fi.write('Platform: %s\n' % platform.platform())
 
-def traceroute(logfile):
+def traceroute(code, logfile):
     cmd = 'tracert -d -h 64 %s' % target
     fi = open(logfile, 'w+')
     write_base(fi)
@@ -64,7 +64,14 @@ def traceroute(logfile):
                     else:
                         data += ' ' + outs[start]
                     start += 2
-            data += ' ' + outs[start]
+            addr = outs[start]
+            if code == '437':
+                miss_str = 'Request timed out'
+            elif code == '936':
+                miss_str = '«Î«Û≥¨ ±'
+            if addr.startswith(miss_str):
+                addr = '0.0.0.0'
+            data += ' ' + addr
             print out
             fi.write(data + '\n')
             fi.flush()
@@ -109,7 +116,7 @@ def ping(code, logfile):
     fi.close()
 
 def upload(logfile):
-    cmd_curl = 'curl -T "%s" "http://%s/file/"' % (logfile, processor)
+    cmd_curl = 'curl -T "%s" "http://%s:%d/file/"' % (logfile, processor, processor_port)
     print cmd_curl
     args = shlex.split(cmd_curl)
     p = subprocess.Popen(cmd_curl)
@@ -125,7 +132,7 @@ if __name__ == '__main__':
     tid = uuid.uuid1()
 
     trlog = 'tracert_%s.log' % tid
-    traceroute(trlog)
+    traceroute(code, trlog)
     ret = 1
     count = 0
     while ret != 0:
