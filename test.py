@@ -1,21 +1,25 @@
 #coding=gbk
 
-import shlex
 import subprocess
 import time
-import uuid
+import shortuuid
 import os
-from urllib2 import urlopen
 import platform
+import httplib
+import json
 
 target = '8.8.8.8'
 processor = '10.0.63.200'
 processor_port = 8001
 
-def find_ip():
-    my_ip = urlopen('http://ip.42.pl/raw').read()
-    print 'Local address is %s' % my_ip
-    return my_ip
+def find_ip_loc():
+    cli = httplib.HTTPConnection('ipinfo.io', 80, timeout=30)
+    cli.request('GET', 'http://ipinfo.io')
+    res = cli.getresponse()
+    data = res.read()
+    print data
+    ipinfo = json.loads(data)
+    return ipinfo
 
 def chcp():
     r = os.popen('chcp')
@@ -31,15 +35,23 @@ def chcp():
     print 'Your system language is ' + lang
     return code
 
-def write_base(fi):    
-    fi.write('Target: %s\n' % target)
-    fi.write('LocalAddress: %s\n' % find_ip())
-    fi.write('Platform: %s\n' % platform.platform())
+def writebase(logfile):
+    fi = open(logfile, 'w+')
+    ipinfo = find_ip_loc()
+    baseinfo = dict()
+    baseinfo['target'] = target
+    baseinfo['ip'] = ipinfo['ip']
+    baseinfo['location'] = ipinfo['city'] + ' ' + ipinfo['region'] + ' ' + ipinfo['country']
+    baseinfo['org'] = ipinfo['org']
+    baseinfo['platform'] = platform.platform()
+    baseinfo['time'] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
+    jsonstr = json.dumps(baseinfo)
+    fi.write(jsonstr)
+    fi.close()
 
 def traceroute(code, logfile):
     cmd = 'tracert -d -h 64 %s' % target
     fi = open(logfile, 'w+')
-    write_base(fi)
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
     while True:
         out = p.stdout.readline()
@@ -80,7 +92,6 @@ def traceroute(code, logfile):
 def ping(code, logfile):
     cmd = 'ping -t %s' % target
     fi = open(logfile, 'w+')
-    write_base(fi)
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
     seq = 1
     while True:
@@ -116,12 +127,17 @@ def ping(code, logfile):
     fi.close()
 
 def upload(logfile):
-    cmd_curl = 'curl -T "%s" "http://%s:%d/file/"' % (logfile, processor, processor_port)
-    print cmd_curl
-    args = shlex.split(cmd_curl)
-    p = subprocess.Popen(cmd_curl)
-    p.wait()
-    return p.returncode
+    fi = open(logfile, 'rb')
+    data = fi.read()
+    fi.close()
+    headers = {"Content-type": "text/plain"}
+    srv_url = "http://%s:%d/file/%s" % (processor, processor_port, logfile)
+    cli = httplib.HTTPConnection(processor, processor_port, timeout=30)
+    cli.request("PUT", srv_url, data, headers)
+    res = cli.getresponse()
+    if res.status == 200:
+        return 0
+    return 1
 
 if __name__ == '__main__':
     print 'PALLN test starting...'
@@ -129,7 +145,19 @@ if __name__ == '__main__':
 
     code = chcp()
 
-    tid = uuid.uuid1()
+    tid = shortuuid.uuid()
+
+    baselog = 'base_%s.log' % tid
+    writebase(baselog)
+    ret = 1
+    count = 0
+    while ret != 0:
+        count += 1
+        if count == 4:
+            break
+        ret = upload(baselog)
+        if ret == 0:
+            os.system('del %s' % baselog)
 
     trlog = 'tracert_%s.log' % tid
     traceroute(code, trlog)
@@ -142,7 +170,6 @@ if __name__ == '__main__':
         ret = upload(trlog)
         if ret == 0:
             os.system('del %s' % trlog)
-        
 
     pinglog = 'ping_%s.log' % tid
     ping(code, pinglog)
