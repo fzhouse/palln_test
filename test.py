@@ -68,13 +68,13 @@ def traceroute(code, logfile):
             start = 1
             for i in range(3):
                 if outs[start] == '*':
-                    data += ' -1'
+                    data += ',-1'
                     start += 1
                 else:
                     if outs[start] == '<1':
-                        data += ' 0'
+                        data += ',0'
                     else:
-                        data += ' ' + outs[start]
+                        data += ',' + outs[start]
                     start += 2
             addr = outs[start]
             if code == '437':
@@ -83,7 +83,7 @@ def traceroute(code, logfile):
                 miss_str = '请求超时'
             if addr.startswith(miss_str):
                 addr = '0.0.0.0'
-            data += ' ' + addr
+            data += ',' + addr
             print out
             fi.write(data + '\n')
             fi.flush()
@@ -108,17 +108,17 @@ def ping(code, logfile):
                 miss_str = '请求超时'
             if out.startswith(hit_str):
                 print out
-                data = '%d ' % seq
+                data = '%d,' % seq
                 outs = out.split()
                 byts = outs[3].split('=', 1)[1]
                 delay = outs[4].split('=', 1)[1].split('ms', 1)[0]
                 ttl = outs[5].split('=', 1)[1]
-                data += '%s %s %s' % (byts, delay, ttl)
+                data += '%s,%s,%s' % (byts, delay, ttl)
                 seq += 1
             elif out.startswith(miss_str):
                 print out
-                data = '%d ' % seq
-                data += '0 -1 0'
+                data = '%d,' % seq
+                data += '0,-1,0'
                 seq += 1
             else:
                 continue
